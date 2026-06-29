@@ -1,87 +1,70 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 interface BodyProps {
     lang: 'en' | 'he';
 }
 
 export default function Body({ lang }: BodyProps) {
-    const [cardNumber, setCardNumber] = useState('');
-    const [cardHolder, setCardHolder] = useState('');
-    const [expiry, setExpiry] = useState('');
-    const [cvv, setCvv] = useState('');
     const [isPaying, setIsPaying] = useState(false);
     const [success, setSuccess] = useState(false);
+    const [paymentError, setPaymentError] = useState<string | null>(null);
 
     const t = {
-        title: lang === 'en' ? 'Payment' : 'תשלום',
-        cardholder: lang === 'en' ? 'Cardholder Name' : 'שם בעל הכרטיס',
-        cardholderPlaceholder: lang === 'en' ? 'Israel Israeli' : 'ישראל ישראלי',
-        cardNumber: lang === 'en' ? 'Card Number' : 'מספר כרטיס',
-        expiry: lang === 'en' ? 'Expiry (MM/YY)' : 'תוקף (MM/YY)',
-        cvv: lang === 'en' ? 'CVV' : 'קוד אבטחה (CVV)',
-        payBtn: lang === 'en' ? 'Pay ₪1' : 'שלם ₪1',
-        processing: lang === 'en' ? 'Processing Mock Payment...' : 'מעבד תשלום סימולטיבי...',
+        title: lang === 'en' ? 'Checkout' : 'קופה',
+        summary: lang === 'en' ? 'Order Summary' : 'סיכום הזמנה',
+        description: lang === 'en' ? 'Demo Transaction' : 'עסקת דמו לתצוגה בלבד',
+        amount: lang === 'en' ? 'Amount to Pay' : 'סכום לתשלום',
+        payBtn: lang === 'en' ? 'Proceed to Payment' : 'המשך לתשלום',
         successTitle: lang === 'en' ? 'Payment Successful!' : 'התשלום בוצע בהצלחה!',
-        successSubtitle: lang === 'en' ? 'Simulated transaction complete' : 'העסקה הסתיימה בהצלחה',
-        resetBtn: lang === 'en' ? 'Reset Demo' : 'איפוס דמו'
+        successSubtitle: lang === 'en' ? 'Transaction processed securely by Tranzila' : 'העסקה בוצעה בהצלחה באמצעות טרנזילה',
+        resetBtn: lang === 'en' ? 'Reset Demo' : 'איפוס דמו',
+        cancelBtn: lang === 'en' ? 'Cancel' : 'ביטול',
+        secureNotice: lang === 'en' 
+            ? 'Payments are secure and encrypted via Tranzila' 
+            : 'התשלום מאובטח ומוצפן באמצעות Tranzila',
+        loadingIframe: lang === 'en' ? 'Loading secure checkout...' : 'טוען קופה מאובטחת...'
     };
 
-    const handleCardNumberChange = (value: string) => {
-        const cleanValue = value.replace(/\D/g, '').substring(0, 16);
-        const formatted = cleanValue.replace(/(\d{4})(?=\d)/g, '$1 ');
-        setCardNumber(formatted);
-    };
+    useEffect(() => {
+        const handleMessage = (event: MessageEvent) => {
+            // Verify message is from the same origin (due to iframe redirect)
+            if (event.origin !== window.location.origin) return;
 
-    const handlePay = (e: React.FormEvent) => {
-        e.preventDefault();
-        setIsPaying(true);
-        setTimeout(() => {
-            setIsPaying(false);
-            setSuccess(true);
-        }, 1500);
-    };
-    const handleDateAdjustment = (value: string) => {
-        let cleaned = value.replace(/\D/g, '');
-
-        // If the first digit is 2-9, prepend a 0 to make it a valid 2-digit month (02-09)
-        if (cleaned.length > 0) {
-            const firstDigit = cleaned.charAt(0);
-            if (firstDigit !== '0' && firstDigit !== '1') {
-                cleaned = '0' + cleaned;
+            if (event.data?.type === 'TRANZILA_SUCCESS') {
+                setSuccess(true);
+                setIsPaying(false);
+                setPaymentError(null);
+            } else if (event.data?.type === 'TRANZILA_FAIL') {
+                setIsPaying(false);
+                setPaymentError(lang === 'en' ? 'Payment was rejected or cancelled.' : 'התשלום נדחה או בוטל.');
             }
-        }
+        };
 
-        cleaned = cleaned.substring(0, 4);
+        window.addEventListener('message', handleMessage);
+        return () => window.removeEventListener('message', handleMessage);
+    }, [lang]);
 
-        // Validate month if we have at least 2 digits
-        if (cleaned.length >= 2) {
-            const month = parseInt(cleaned.substring(0, 2), 10);
-            if (month < 1 || month > 12) {
-                return; // Invalid month, reject change
-            }
-        }
+    const terminal = import.meta.env.VITE_TRANZILA_TERMINAL || 'testtranzila';
+    const currency = import.meta.env.VITE_TRANZILA_CURRENCY || '1';
+    const sum = '1';
+    const tranzilaLang = lang === 'he' ? 'il' : 'us';
+    
+    const okUrl = encodeURIComponent(`${window.location.origin}/success.html`);
+    const failUrl = encodeURIComponent(`${window.location.origin}/fail.html`);
 
-        // Validate year ONLY if we have all 4 digits (so we don't block typing the first digit like "2")
-        if (cleaned.length === 4) {
-            const year = parseInt(cleaned.substring(2, 4), 10);
-            if (year < 24 || year > 99) {
-                return; // Invalid year, reject change
-            }
-        }
-
-        // Format as MM/YY
-        let formatted = cleaned;
-        if (cleaned.length > 2) {
-            formatted = `${cleaned.substring(0, 2)}/${cleaned.substring(2)}`;
-        }
-
-        setExpiry(formatted);
-    };
+    // Tranzila direct iframe integration URL
+    const iframeUrl = `https://direct.tranzila.com/${terminal}/iframenew.php?sum=${sum}&currency=${currency}&lang=${tranzilaLang}&ok_url=${okUrl}&fail_url=${failUrl}&nologo=1`;
 
     return (
         <div className="w-full bg-gray-50 flex items-center justify-center p-6 text-gray-800 pt-25" dir={lang === 'he' ? 'rtl' : 'ltr'}>
             <div className="w-full max-w-md bg-white border border-gray-300 rounded-lg p-6 shadow-sm">
                 <h2 className="text-xl font-bold mb-4 text-center text-gray-900">{t.title}</h2>
+
+                {paymentError && (
+                    <div className="mb-4 p-3 bg-red-50 text-red-700 text-sm rounded border border-red-200 text-center">
+                        {paymentError}
+                    </div>
+                )}
 
                 {success ? (
                     <div className="text-center p-4 bg-green-50 text-green-700 rounded border border-green-200">
@@ -89,86 +72,62 @@ export default function Body({ lang }: BodyProps) {
                         <p className="text-xs mt-1 text-gray-600">{t.successSubtitle}</p>
                         <button
                             onClick={() => {
-                                setCardNumber('');
-                                setCardHolder('');
-                                setExpiry('');
-                                setCvv('');
                                 setSuccess(false);
+                                setPaymentError(null);
                             }}
-                            className="mt-4 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-800 text-xs rounded border border-gray-300 transition"
+                            className="mt-4 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-800 text-xs rounded border border-gray-300 transition cursor-pointer"
                         >
                             {t.resetBtn}
                         </button>
                     </div>
-                ) : (
-                    <form onSubmit={handlePay} className="space-y-4">
-                        <div>
-                            <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wider mb-1">
-                                {t.cardholder}
-                            </label>
-                            <input
-                                type="text"
-                                required
-                                value={cardHolder}
-                                onChange={(e) => setCardHolder(e.target.value)}
-                                placeholder={t.cardholderPlaceholder}
-                                className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
-                            />
-                        </div>
-
-                        <div>
-                            <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wider mb-1">
-                                {t.cardNumber}
-                            </label>
-                            <input
-                                type="text"
-                                required
-                                value={cardNumber}
-                                onChange={(e) => handleCardNumberChange(e.target.value)}
-                                placeholder="4580 1234 5678 9012"
-                                className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
-                            />
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-4">
-                            <div>
-                                <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wider mb-1">
-                                    {t.expiry}
-                                </label>
-                                <input
-                                    type="text"
-                                    required
-                                    value={expiry}
-                                    maxLength={5}
-                                    onChange={(e) => handleDateAdjustment(e.target.value)}
-                                    placeholder="12/28"
-                                    className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
-                                />
+                ) : isPaying ? (
+                    <div className="flex flex-col space-y-4">
+                        <div className="w-full bg-gray-100 rounded-md overflow-hidden relative" style={{ height: '480px' }}>
+                            <div className="absolute inset-0 flex items-center justify-center text-sm text-gray-500 z-0">
+                                {t.loadingIframe}
                             </div>
-                            <div>
-                                <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wider mb-1">
-                                    {t.cvv}
-                                </label>
-                                <input
-                                    type="text"
-                                    required
-                                    value={cvv}
-                                    onChange={(e) => setCvv(e.target.value.replace(/\D/g, ''))}
-                                    placeholder="123"
-                                    maxLength={4}
-                                    className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
-                                />
+                            <iframe
+                                src={iframeUrl}
+                                title="Tranzila Secure Checkout"
+                                className="w-full h-full border-0 relative z-10"
+                            />
+                        </div>
+                        <button
+                            onClick={() => {
+                                setIsPaying(false);
+                                setPaymentError(null);
+                            }}
+                            className="w-full bg-gray-200 hover:bg-gray-300 text-gray-700 font-semibold py-2 px-4 rounded transition text-sm cursor-pointer text-center"
+                        >
+                            {t.cancelBtn}
+                        </button>
+                    </div>
+                ) : (
+                    <div className="space-y-6">
+                        <div className="border border-gray-200 rounded p-4 bg-gray-50/50 space-y-3">
+                            <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider">{t.summary}</div>
+                            <div className="flex justify-between items-center">
+                                <span className="text-sm font-medium text-gray-700">{t.description}</span>
+                                <span className="text-sm font-bold text-gray-900">₪1.00</span>
+                            </div>
+                            <div className="border-t border-gray-200 pt-3 flex justify-between items-center font-bold">
+                                <span className="text-sm text-gray-800">{t.amount}</span>
+                                <span className="text-base text-blue-600">₪1.00</span>
                             </div>
                         </div>
 
                         <button
-                            type="submit"
-                            disabled={isPaying}
-                            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 px-4 rounded transition text-sm disabled:opacity-50 mt-6"
+                            onClick={() => setIsPaying(true)}
+                            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 px-4 rounded transition text-sm cursor-pointer text-center block"
                         >
-                            {isPaying ? t.processing : t.payBtn}
+                            {t.payBtn}
                         </button>
-                    </form>
+
+                        <div className="text-center text-xs text-gray-500 flex items-center justify-center gap-1">
+                            <span>🔒</span>
+                            <span>{t.secureNotice}</span>
+                        </div>
+                    </div>
                 )}
             </div>
         </div>
